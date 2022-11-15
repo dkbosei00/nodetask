@@ -1,5 +1,10 @@
 const express = require("express")
 const app = express()
+const cookieParser = require("cookie-parser")
+const{ adminAuth, userAuth } = require("./auth/auth.js")
+
+//Middleware
+app.use(cookieParser())
 app.use(express.json())
 app.set("view engine", "ejs")
 
@@ -8,9 +13,12 @@ const connectDB = require("./config/db.js")
 connectDB()
 
 
-// app.use("/", indexRouter)
-// app.use("/dashboard", dashboardRouter)
-// app.use("")
+app.get("/admin", adminAuth, (req, res)=>{
+    res.send("Admin Route")
+})
+app.get("/basic", userAuth, (req, res) =>{
+    res.send("Basic User Route")
+})
 app.use("/api/auth", require("./routers/users.js"))
 
 
