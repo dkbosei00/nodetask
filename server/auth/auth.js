@@ -1,6 +1,7 @@
 const User = require("../model/users.js")
 const bcrypt = require("bcryptjs")
-
+const jwt = require("jsonwebtoken")
+const jwtSecret = require("./secret.js")
 
 
 exports.register = async (req, res, next) =>{
@@ -12,9 +13,23 @@ exports.register = async (req, res, next) =>{
         bcrypt.hash(password, 10).then(async (hash) =>{
         await User.create({username, password: hash})
         })
-        .then(user=>
-            res.status(200).json({success: true, message: "User was successfully created.", user
-        }))
+        .then(user=>{
+            //Generate a token using id, username and expiry time (No sensitive info)
+            const expTime = 20 * 60 //20 minutes in seconds
+            const token = jwt.sign(
+                {id: user._id, username, role: user.role}, jwtSecret, { expiresIn: expTime }
+            )
+            //Token is passed down to client as a cookie
+            res.cookie("jwt", token,{
+                httpOnly: true,
+                expTime: expTime * 1000 //20 minutes in ms
+            })
+            res.status(201).json({
+                message: "User successfully created.",
+                user: user._id
+            })
+        })
+        
     }catch(error){
         res.status(401).json({message: "User failed to create.", error: error.message})
     }
@@ -33,10 +48,25 @@ exports.login = async (req, res, next) =>{
         }
         else{
             bcrypt.compare(password, user.password).then(function(result){
-                result ? res.status(200).json({message: "Login successful", user}) 
-                : res.status(400).json({message: "Login was not successful"})
+                if(result){
+                    const expTime = 20 * 60 //20 minutes in seconds
+                    const token = jwt.sign({
+                        id: user._id, username, role: user.role
+                    }, jwtSecret, { expiresIn: expTime})
+                    res.cookie("jwt", token, {
+                        httpOnly: true,
+                        expTime: expTime * 1000 //20 minutes in ms
+                    })
+                    res.status(201).json({
+                        message: "User logged in successfully",
+                        user: user._id
+                    })
+                }else{
+                    res.status(400).json({
+                        message: "User login failed"
+                    })
+                }
             })
-            
         }
     }catch(error){
         return res.status(500).json({message: "An error occured", error: error.message})
@@ -89,3 +119,53 @@ exports.deleteUser = async (req, res, next) =>{
         res.status(400).json({message: "An error has occured", error: error.message})
         
 })}
+
+exports.adminAuth = (req, res ,next) => {
+    const token = req.cookies.jwt
+    if(token){
+        jwt.verify(token, jwtSecret, (err, decodedToken) =>{
+            if(err){
+                res.status(401).json({
+                    message: "Not authorized."
+                })
+            }else{
+                if (decodedToken.role !== "admin"){
+                    return res.status(401).json({
+                        message: "Unauthorized user."
+                    })
+                } else{
+                    next()
+                }
+            }
+        })
+    }else{
+        return res.status(400).json({
+            message: "Not authorized, token not found"
+        })
+    }
+}
+
+exports.userAuth = (req, res ,next) => {
+    const token = req.cookies.jwt
+    if(token){
+        jwt.verify(token, jwtSecret, (err, decodedToken) =>{
+            if(err){
+                res.status(401).json({
+                    message: "Not authorized."
+                })
+            }else{
+                if (decodedToken.role !== "Basic"){
+                    return res.status(401).json({
+                        message: "Unauthorized user."
+                    })
+                } else{
+                    next()
+                }
+            }
+        })
+    }else{
+        return res.status(400).json({
+            message: "Not authorized, token not found"
+        })
+    }
+}
