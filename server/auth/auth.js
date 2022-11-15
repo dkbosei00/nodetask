@@ -13,16 +13,16 @@ exports.register = async (req, res, next) =>{
         bcrypt.hash(password, 10).then(async (hash) =>{
         await User.create({username, password: hash})
         })
-        .then(user=>{
+        .then(function(user){
             //Generate a token using id, username and expiry time (No sensitive info)
-            const expTime = 20 * 60 //20 minutes in seconds
+            const maxAge = 20 * 60 //20 minutes in seconds
             const token = jwt.sign(
-                {id: user._id, username, role: user.role}, jwtSecret, { expiresIn: expTime }
+                {id: user._id, username, role: user.role}, jwtSecret, { expiresIn: maxAge }
             )
             //Token is passed down to client as a cookie
             res.cookie("jwt", token,{
                 httpOnly: true,
-                expTime: expTime * 1000 //20 minutes in ms
+                maxAge: maxAge * 1000 //20 minutes in ms
             })
             res.status(201).json({
                 message: "User successfully created.",
@@ -49,13 +49,13 @@ exports.login = async (req, res, next) =>{
         else{
             bcrypt.compare(password, user.password).then(function(result){
                 if(result){
-                    const expTime = 20 * 60 //20 minutes in seconds
+                    const maxAge = 20 * 60 //20 minutes in seconds
                     const token = jwt.sign({
                         id: user._id, username, role: user.role
-                    }, jwtSecret, { expiresIn: expTime})
+                    }, jwtSecret, { expiresIn: maxAge})
                     res.cookie("jwt", token, {
                         httpOnly: true,
-                        expTime: expTime * 1000 //20 minutes in ms
+                        maxAge: maxAge * 1000 //20 minutes in ms
                     })
                     res.status(201).json({
                         message: "User logged in successfully",
@@ -169,3 +169,20 @@ exports.userAuth = (req, res ,next) => {
         })
     }
 }
+
+exports.getUsers = async(req, res) =>{
+    await User.find({})
+    .then(users=>{
+        const userFunction = users.map(user=>{
+            const container = {}
+            container.username = user.username
+            container.role = user.role
+            return container
+        })
+        res.status(200).json({user: userFunction})
+    })
+    .catch(err =>
+        res.status(401).json({message: "Not successful", error: err.message})
+        )
+}
+
