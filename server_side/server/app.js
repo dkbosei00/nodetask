@@ -2,8 +2,10 @@ const express = require("express")
 const app = express()
 const cookieParser = require("cookie-parser")
 const{ adminAuth, userAuth } = require("./auth/auth.js")
+const cors = require("cors")
 
 //Middleware
+app.use(cors())
 app.use(cookieParser())
 app.use(express.json())
 app.use("/api/auth", require("./routers/crud.js"))
@@ -11,7 +13,7 @@ app.set("view engine", "ejs")
 
 // Connecting to Database
 const connectDB = require("./config/db.js")
-connectDB()
+connectDB() 
 
 
 app.get("/", (req, res) => res.render("index"))
@@ -28,9 +30,9 @@ app.get("/logout", (req, res) =>{
 
 
 
-
-const server = app.listen(3000, ()=>{
-    console.log("Server is now running on port ", server.address().port)
+const PORT = process.env.PORT || 8080
+const server = app.listen(PORT, ()=>{
+    console.log(`Server is now running on port ${PORT}`)
 })
 
 process.on("unhandledRejection", err=>{

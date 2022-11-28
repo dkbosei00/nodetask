@@ -1,84 +1,94 @@
 const User = require("../model/users.js")
 const bcrypt = require("bcryptjs")
-const jwt = require("jsonwebtoken")
+const jwt = require("jsonwebtoken") 
 const jwtSecret = require("./secret.js")
 
 
 exports.register = async (req, res, next) =>{
+try{
     const {username, password} = req.body
     if(password.length < 6){
         return res.status(400).json({message: "Password cannot be less an 6 characters"})
     }
-    try{
-        bcrypt.hash(password, 10).then(async (hash) =>{
-        await User.create({username, password: hash})
+        let _hash = await bcrypt.hash(password, 10);
+        let user = await User.create({username, password: _hash});
+        console.log('user', user)
+
+        //Generate a token using id, username and expiry time (No sensitive info)
+        const maxAge = 20 * 60 //20 minutes in seconds
+        const token = jwt.sign(
+            {id: user?._id,
+            username,
+            role: user?.role},
+            jwtSecret,
+            { expiresIn: maxAge }
+        )
+        //Token is passed down to client as a cookie
+        res.cookie("jwt", token,{
+            httpOnly: true,
+            maxAge: maxAge * 1000 //20 minutes in ms
         })
-        .then(function(user){
-            //Generate a token using id, username and expiry time (No sensitive info)
-            const maxAge = 20 * 60 //20 minutes in seconds
-            const token = jwt.sign(
-                {id: user._id, username, role: user.role}, jwtSecret, { expiresIn: maxAge }
-            )
-            //Token is passed down to client as a cookie
-            res.cookie("jwt", token,{
-                httpOnly: true,
-                maxAge: maxAge * 1000 //20 minutes in ms
-            })
-            res.status(201).json({
-                message: "User successfully created.",
-                user: user._id
-            })
+        res.status(201).json({
+            message: "User successfully created.",
+            user: user._id,
+            role: user.role,
+            token: token,
         })
-        
-    }catch(error){
-        res.status(401).json({message: "User failed to create.", error: error.message})
-    }
+}catch(err){
+    res.status(404).json({message: "User failed to create.", error: err})
+}
 
 }
 
 exports.login = async (req, res, next) =>{
-    const {username, password} = req.body
-    if(!username || !password){
-        return res.status(400).json({message: "Username or password not found"})
-    }
     try{
+        const {username, password} = req.body
+        if(!username || !password){
+            return res.status(400).json({message: "Username or password not found"})
+        }
         const user = await User.findOne({username})
+        console.log(user)
         if(!user){
             return res.status(401).json({message: "User not found."})
         }
         else{
-            bcrypt.compare(password, user.password).then(function(result){
-                if(result){
+            let passwordComparison = await bcrypt.compare(password, user.password)
+                if(passwordComparison){
                     const maxAge = 20 * 60 //20 minutes in seconds
                     const token = jwt.sign({
-                        id: user._id, username, role: user.role
-                    }, jwtSecret, { expiresIn: maxAge})
+                        id: user._id,
+                        username,
+                        role: user.role},
+                        jwtSecret,
+                        { expiresIn: maxAge})
+
                     res.cookie("jwt", token, {
                         httpOnly: true,
                         maxAge: maxAge * 1000 //20 minutes in ms
                     })
                     res.status(201).json({
                         message: "User logged in successfully",
-                        user: user._id
+                        user: user._id,
+                        role: user.role
                     })
                 }else{
                     res.status(400).json({
                         message: "User login failed"
                     })
                 }
-            })
-        }
-    }catch(error){
-        return res.status(500).json({message: "An error occured", error: error.message})
+            }
+        }catch(error){
+            return res.status(500).json({message: "An error occured", error: error})
     }
 }
 
 exports.update = async (req, res, next)=>{
+    try{
     const { role, id } = req.body
+    console.log({body: req.body})
     if(role && id ){
         if(role === "admin"){
-            await User.findById(id)
-            .then(user=>{
+           let user = await User.findById(id)
                 if(user.role !== "admin"){
                     user.role = role
                     user.save(err=>{
@@ -95,7 +105,6 @@ exports.update = async (req, res, next)=>{
                         message: "User is already an Admin"
                     })
                 }
-            })
         }else{
             res.status(400).json({
                 message: "User is not an admin."
@@ -106,19 +115,25 @@ exports.update = async (req, res, next)=>{
             message: "Role or ID is not present."
         })
     }
+}catch(error){
+    console.log({error: error.message})
+}
 }
 
 exports.deleteUser = async (req, res, next) =>{
+    try{
     const {id} = req.body
-    await User.findById(id)
-    .then(user => user.remove())
-    .then(user => res.status(201).json({
-        message: "User has been successfully deleted", user
-    }))
-    .catch(error =>{
+    let user = await User.findById(id)
+    if(user){
+        user.remove()
+        res.status(201).json({
+            message: "User has been successfully deleted", user
+        })
+    }
+    }catch(error){
         res.status(400).json({message: "An error has occured", error: error.message})
         
-})}
+    }}
 
 exports.adminAuth = (req, res ,next) => {
     const token = req.cookies.jwt
@@ -171,18 +186,18 @@ exports.userAuth = (req, res ,next) => {
 }
 
 exports.getUsers = async(req, res) =>{
-    await User.find({})
-    .then(users=>{
-        const userFunction = users.map(user=>{
-            const container = {}
+    try{
+    let users = await User.find({})
+    console.log("users", users)
+    const userFunction = users.map(user=>{
+    const container = {}
             container.username = user.username
             container.role = user.role
             return container
         })
         res.status(200).json({user: userFunction})
-    })
-    .catch(err =>
+}catch(error){
         res.status(401).json({message: "Not successful", error: err.message})
-        )
+}
 }
 
